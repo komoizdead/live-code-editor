@@ -3,6 +3,7 @@
 A single-file HTML/CSS/JS playground with an instant live preview. No build step, no dependencies — it's one HTML file you can open in any browser.
 
 **Live version:** https://live-code-editor-hjies922f87.qoder.website
+**Mirror:** https://komoizdead.github.io/live-code-editor/
 
 ## Using it
 
