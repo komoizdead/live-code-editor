@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Web Code Editor</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      height: 100vh;
+      background-color: #1e1e1e;
+      color: #fff;
+    }
+
+    .editor-container {
+      width: 50%;
+      display: flex;
+      flex-direction: column;
+      border-right: 2px solid #333;
+    }
+
+    .panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid #333;
+    }
+
+    .panel-header {
+      background-color: #252526;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #cccccc;
+    }
+
+    textarea {
+      flex: 1;
+      background-color: #1e1e1e;
+      color: #d4d4d4;
+      border: none;
+      outline: none;
+      padding: 10px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 14px;
+      resize: none;
+      line-height: 1.4;
+    }
+
+    .preview-container {
+      width: 50%;
+      background-color: #ffffff;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .preview-header {
+      background-color: #252526;
+      color: #cccccc;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: bold;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .preview-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .preview-actions button {
+      background-color: #3a3d41;
+      color: #cccccc;
+      border: 1px solid #4a4d51;
+      border-radius: 3px;
+      padding: 3px 10px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+    }
+
+    .preview-actions button:hover {
+      background-color: #4a4d51;
+      color: #ffffff;
+    }
+
+    .error-bar {
+      background-color: #5a1d1d;
+      color: #ffb4b4;
+      border-bottom: 1px solid #7a2a2a;
+      padding: 8px 12px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    iframe {
+      flex: 1;
+      width: 100%;
+      border: none;
+      background-color: #ffffff;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="editor-container">
+    <div class="panel">
+      <div class="panel-header">HTML</div>
+      <textarea id="html" spellcheck="false" placeholder="Type HTML here..."></textarea>
+    </div>
+    <div class="panel">
+      <div class="panel-header">CSS</div>
+      <textarea id="css" spellcheck="false" placeholder="Type CSS here..."></textarea>
+    </div>
+    <div class="panel">
+      <div class="panel-header">JavaScript</div>
+      <textarea id="js" spellcheck="false" placeholder="Type JS here..."></textarea>
+    </div>
+  </div>
+
+  <div class="preview-container">
+    <div class="preview-header">
+      <span>Live Preview</span>
+      <div class="preview-actions">
+        <button id="reset" type="button">Reset</button>
+        <button id="save" type="button">Save as .html</button>
+      </div>
+    </div>
+    <div id="error-bar" class="error-bar" hidden></div>
+    <iframe id="output" title="Live preview of your HTML, CSS and JavaScript"></iframe>
+  </div>
+
+  <script>
+    const htmlInput = document.getElementById('html');
+    const cssInput = document.getElementById('css');
+    const jsInput = document.getElementById('js');
+    const output = document.getElementById('output');
+    const errorBar = document.getElementById('error-bar');
+
+    const STARTER = {
+      html: `<h1>Hello World</h1>
+<button id="btn">Click Me</button>`,
+
+      css: `body {
+  font-family: sans-serif;
+  padding: 20px;
+}
+h1 {
+  color: #007acc;
+}
+button {
+  padding: 8px 16px;
+  cursor: pointer;
+}`,
+
+      js: `document.getElementById('btn').addEventListener('click', () => {
+  alert('Button clicked!');
+});`
+    };
+
+    const STORE_KEY = { html: 'liveEditor.html', css: 'liveEditor.css', js: 'liveEditor.js' };
+    const DEBOUNCE_MS = 150;
+
+    const inputs = [htmlInput, cssInput, jsInput];
+
+    function escapeClosingScript(code) {
+      return code.replace(/<\/script/gi, '<\\/script');
+    }
+
+    function buildDocument() {
+      const css = cssInput.value;
+      const html = htmlInput.value;
+      const js = escapeClosingScript(jsInput.value);
+
+      return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+${css}
+<\/style>
+</head>
+<body>
+${html}
+<script>
+window.onerror = function (message, source, line) {
+  parent.postMessage({ liveEditorError: message + (line ? ' (line ' + line + ')' : '') }, '*');
+  return false;
+};
+<\/script>
+<script>
+${js}
+<\/script>
+</body>
+</html>`;
+    }
+
+    function render() {
+      errorBar.hidden = true;
+      errorBar.textContent = '';
+
+      const doc = output.contentDocument;
+      doc.open();
+      doc.write(buildDocument());
+      doc.close();
+    }
+
+    let debounceTimer = null;
+
+    function scheduleRender() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(render, DEBOUNCE_MS);
+    }
+
+    window.addEventListener('message', (event) => {
+      const message = event.data && event.data.liveEditorError;
+      if (message) {
+        errorBar.textContent = message;
+        errorBar.hidden = false;
+      }
+    });
+
+    inputs.forEach((input) => {
+      const saved = localStorage.getItem(STORE_KEY[input.id]);
+      input.value = saved === null ? STARTER[input.id] : saved;
+
+      input.addEventListener('input', () => {
+        localStorage.setItem(STORE_KEY[input.id], input.value);
+        scheduleRender();
+      });
+    });
+
+    document.getElementById('reset').addEventListener('click', () => {
+      if (!confirm('Reset all three panes back to the starter template? Your current code will be replaced.')) {
+        return;
+      }
+      inputs.forEach((input) => {
+        input.value = STARTER[input.id];
+        localStorage.setItem(STORE_KEY[input.id], input.value);
+      });
+      render();
+    });
+
+    document.getElementById('save').addEventListener('click', () => {
+      const blobUrl = URL.createObjectURL(new Blob([buildDocument()], { type: 'text/html' }));
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = 'sketch.html';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    });
+
+    render();
+  </script>
+</body>
+</html>
